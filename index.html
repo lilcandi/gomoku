@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>五子棋 - Gomoku</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>♟ 五子棋 <span class="subtitle">Gomoku</span></h1>
+      <div class="game-info">
+        <div class="player-turn">
+          <span id="turnIndicator" class="indicator black"></span>
+          <span id="turnText">黑棋落子</span>
+        </div>
+        <div class="score-board">
+          <div class="score-item">
+            <span class="score-dot black-dot"></span>
+            <span>黑: <strong id="blackScore">0</strong></span>
+          </div>
+          <div class="score-item">
+            <span class="score-dot white-dot"></span>
+            <span>白: <strong id="whiteScore">0</strong></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="game-area">
+      <div class="board-wrapper">
+        <canvas id="boardCanvas" width="600" height="600"></canvas>
+      </div>
+
+      <div class="sidebar">
+        <div class="mode-selector">
+          <label class="mode-label">游戏模式</label>
+          <div class="mode-buttons">
+            <button id="modePVP" class="mode-btn active">👥 双人对战</button>
+            <button id="modePVC" class="mode-btn">🤖 人机对战</button>
+          </div>
+        </div>
+
+        <button id="undoBtn" class="action-btn">↩ 悔棋</button>
+        <button id="restartBtn" class="action-btn restart">🔄 重新开局</button>
+
+        <div class="move-history">
+          <div class="history-header">📜 落子记录</div>
+          <div id="moveList" class="move-list">
+            <span class="empty-hint">等待落子...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="winModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="trophy">🏆</div>
+        <h2 id="winMessage">黑棋获胜！</h2>
+        <p id="winDetail">五子连珠</p>
+        <button id="playAgainBtn" class="modal-btn">再来一局</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
