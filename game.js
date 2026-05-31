@@ -10,7 +10,7 @@ class GomokuGame {
     this.history = [];
     this.gameOver = false;
     this.winner = null;
-    this.mode = 'pvp'; // 'pvp' or 'pvc'
+    this.mode = 'pvp';
     this.difficulty = 'medium';
     this.scores = { black: 0, white: 0 };
     this.aiThinking = false;
@@ -32,7 +32,7 @@ class GomokuGame {
     this.aiThinking = false;
   }
 
-  place(row, col, skipSwitch) {
+  place(row, col) {
     if (this.gameOver || this.aiThinking) return false;
     if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
     if (this.board[row][col] !== EMPTY) return false;
@@ -56,9 +56,7 @@ class GomokuGame {
       return true;
     }
 
-    if (!skipSwitch) {
-      this.currentPlayer = this.currentPlayer === BLACK ? WHITE : BLACK;
-    }
+    this.currentPlayer = this.currentPlayer === BLACK ? WHITE : BLACK;
     return true;
   }
 
@@ -99,29 +97,6 @@ class GomokuGame {
     }
     return false;
   }
-
-  getWinLine(row, col, player) {
-    const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
-    for (const [dx, dy] of dirs) {
-      const cells = [{ row, col }];
-      for (let i = 1; i < 5; i++) {
-        const r = row + dx * i, c = col + dy * i;
-        if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) break;
-        if (this.board[r][c] !== player) break;
-        cells.push({ row: r, col: c });
-      }
-      for (let i = 1; i < 5; i++) {
-        const r = row - dx * i, c = col - dy * i;
-        if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) break;
-        if (this.board[r][c] !== player) break;
-        cells.push({ row: r, col: c });
-      }
-      if (cells.length >= 5) return cells;
-    }
-    return [];
-  }
-
-  // ==================== AI ====================
 
   hasNeighbor(row, col, dist) {
     for (let dr = -dist; dr <= dist; dr++) {
@@ -168,9 +143,8 @@ class GomokuGame {
     return score;
   }
 
-  // ---- EASY ----
   aiEasy() {
-    const best = [];
+    const candidates = [];
     for (let r = 0; r < BOARD_SIZE; r++) {
       for (let c = 0; c < BOARD_SIZE; c++) {
         if (this.board[r][c] !== EMPTY || !this.hasNeighbor(r, c, 2)) continue;
@@ -178,18 +152,16 @@ class GomokuGame {
         const def = this.evaluatePosition(r, c, BLACK);
         let s = Math.max(off, def) + Math.random() * 3000;
         s += (7 - Math.abs(r - 7)) * 2 + (7 - Math.abs(c - 7)) * 2;
-        best.push({ r, c, s });
+        candidates.push({ r, c, s });
       }
     }
-    if (best.length === 0) return { r: 7, c: 7 };
-    best.sort((a, b) => b.s - a.s);
-    if (Math.random() < 0.3 && best.length > 2) return best[Math.floor(Math.random() * Math.min(5, best.length))];
-    const prev = this.history.length >= 2 ? this.history[this.history.length - 2] : null;
-    if (prev && Math.random() < 0.2) return { r: prev.row + (Math.random() < 0.5 ? 1 : -1), c: prev.col + (Math.random() < 0.5 ? 1 : -1) };
-    return best[0];
+    if (candidates.length === 0) return { r: 7, c: 7 };
+    candidates.sort((a, b) => b.s - a.s);
+    if (Math.random() < 0.3 && candidates.length > 2) 
+      return candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
+    return candidates[0];
   }
 
-  // ---- MEDIUM ----
   aiMedium() {
     let bestS = -1;
     const best = [];
@@ -198,10 +170,7 @@ class GomokuGame {
         if (this.board[r][c] !== EMPTY || !this.hasNeighbor(r, c, 2)) continue;
         const off = this.evaluatePosition(r, c, WHITE);
         const def = this.evaluatePosition(r, c, BLACK);
-        let s = 0;
-        if (off >= 100000) s = off * 1.5;
-        else if (def >= 100000) s = def * 1.3;
-        else s = off * 1.1 + def;
+        let s = off >= 100000 ? off * 1.5 : def >= 100000 ? def * 1.3 : off * 1.1 + def;
         s += (7 - Math.abs(r - 7)) * 5 + (7 - Math.abs(c - 7)) * 5;
         if (s > bestS) { bestS = s; best.length = 0; best.push({ r, c }); }
         else if (s === bestS) best.push({ r, c });
@@ -211,7 +180,6 @@ class GomokuGame {
     return best[Math.floor(Math.random() * best.length)];
   }
 
-  // ---- HARD ----
   aiHard() {
     let bestS = -Infinity;
     let best = { r: 7, c: 7 };
@@ -244,153 +212,42 @@ class GomokuGame {
     return best;
   }
 
-  // ---- AI ENTRY ----
-  aiMove() {
-    if (this.gameOver || this.currentPlayer !== this.aiPlayer) return;
-    console.log('[AI] triggered, difficulty:', this.difficulty);
+  triggerAI() {
+    if (this.gameOver || this.aiThinking) return;
+    if (this.currentPlayer !== this.aiPlayer) return;
+    
     this.aiThinking = true;
-    updateStatus();
+    render();
 
-    // Use requestAnimationFrame for smooth UI update before AI computation
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       let move;
-      const label = this.difficulty;
-      if (label === 'easy') move = this.aiEasy();
-      else if (label === 'hard') move = this.aiHard();
-      else move = this.aiMedium();
-      console.log('[AI] chose:', move.r, move.c);
+      try {
+        if (this.difficulty === 'easy') move = this.aiEasy();
+        else if (this.difficulty === 'hard') move = this.aiHard();
+        else move = this.aiMedium();
+      } catch(e) { console.error('[AI error]', e); this.aiThinking = false; render(); return; }
 
-      const delay = label === 'easy' ? 150 : label === 'hard' ? 500 : 300;
+      if (!move) { this.aiThinking = false; render(); return; }
 
       setTimeout(() => {
-        this.place(move.r, move.c);
-        this.aiThinking = false;
-        if (this.gameOver) {
-          render();
-          setTimeout(showWinModal, 400);
-        } else {
-          this.currentPlayer = BLACK;
-          render();
+        this.board[move.r][move.c] = WHITE;
+        this.history.push({ row: move.r, col: move.c, player: WHITE });
+        this.lastMove = { row: move.r, col: move.c };
+        this.moveCount++;
+
+        if (this.checkWin(move.r, move.c, WHITE)) {
+          this.gameOver = true;
+          this.winner = WHITE;
+          this.scores.white++;
         }
-      }, delay);
-    });
-  }
-}
-
-// ======================== BGM with Web Audio API ========================
-
-class GomokuBGM {
-  constructor() {
-    this.ctx = null;
-    this.playing = false;
-    this.osc = null;
-    this.gain = null;
-    this.sequence = [];
-    this.index = 0;
-    this.timer = null;
-    this.volume = 0.08;
-  }
-
-  // Pentatonic scale notes (frequencies)
-  static NOTES = {
-    C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.00, A4: 440.00,
-    C5: 523.25, D5: 587.33, E5: 659.25, G5: 783.99, A5: 880.00,
-    C3: 130.81, D3: 146.83, E3: 164.81, G3: 196.00, A3: 220.00,
-  };
-
-  // A gentle pentatonic melody (Chinese-style)
-  static MELODY = [
-    { note: 'C4', dur: 0.4 }, { note: 'E4', dur: 0.4 }, { note: 'G4', dur: 0.4 },
-    { note: 'A4', dur: 0.6 }, { note: 'G4', dur: 0.3 }, { note: 'E4', dur: 0.3 },
-    { note: 'D4', dur: 0.5 }, { note: 'C4', dur: 0.3 },
-    { note: 'D4', dur: 0.4 }, { note: 'E4', dur: 0.4 }, { note: 'G4', dur: 0.4 },
-    { note: 'A4', dur: 0.6 }, { note: 'C5', dur: 0.5 }, { note: 'A4', dur: 0.3 },
-    { note: 'G4', dur: 0.8 },
-    // Bass accompaniment
-    { note: 'C3', dur: 0.8 }, { note: 'G3', dur: 0.8 },
-    { note: 'A3', dur: 0.5 }, { note: 'E3', dur: 0.5 }, { note: 'G3', dur: 0.6 },
-    { note: 'C3', dur: 0.8 },
-    // Variation
-    { note: 'E4', dur: 0.4 }, { note: 'G4', dur: 0.4 }, { note: 'A4', dur: 0.4 },
-    { note: 'G4', dur: 0.5 }, { note: 'E4', dur: 0.3 }, { note: 'D4', dur: 0.4 },
-    { note: 'C4', dur: 0.7 }, { rest: true, dur: 0.3 },
-    { note: 'D4', dur: 0.4 }, { note: 'E4', dur: 0.4 }, { note: 'G4', dur: 0.4 },
-    { note: 'A4', dur: 0.6 }, { note: 'G4', dur: 0.5 }, { note: 'E4', dur: 0.5 },
-    { note: 'C4', dur: 1.0 },
-  ];
-
-  start() {
-    if (this.playing) return;
-    try {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.playing = true;
-      this.index = 0;
-      this.playNext();
-    } catch (e) {
-      console.log('[BGM] Audio not supported');
-    }
-  }
-
-  stop() {
-    this.playing = false;
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (this.osc) { try { this.osc.stop(); } catch(e) {} this.osc = null; }
-    if (this.gain) { this.gain = null; }
-    if (this.ctx && this.ctx.state !== 'closed') {
-      this.ctx.close().catch(() => {});
-      this.ctx = null;
-    }
-  }
-
-  playNext() {
-    if (!this.playing || !this.ctx) return;
-
-    const note = GomokuBGM.MELODY[this.index % GomokuBGM.MELODY.length];
-    this.index++;
-
-    if (note.rest) {
-      this.timer = setTimeout(() => this.playNext(), note.dur * 1000);
-      return;
-    }
-
-    const freq = GomokuBGM.NOTES[note.note];
-    if (!freq) { this.timer = setTimeout(() => this.playNext(), 100); return; }
-
-    try {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      
-      // Soft sine wave with slight harmonics
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      
-      gain.gain.setValueAtTime(0, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(this.volume, this.ctx.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(this.volume * 0.7, this.ctx.currentTime + note.dur * 0.6);
-      gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + note.dur);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(this.ctx.currentTime);
-      osc.stop(this.ctx.currentTime + note.dur);
-
-      this.osc = osc;
-      this.gain = gain;
-    } catch(e) {
-      // ignore audio errors
-    }
-
-    this.timer = setTimeout(() => this.playNext(), note.dur * 1000);
-  }
-
-  toggle() {
-    if (this.playing) {
-      this.stop();
-      return false;
-    } else {
-      this.start();
-      return true;
-    }
+        
+        this.currentPlayer = BLACK;
+        this.aiThinking = false;
+        render();
+        
+        if (this.gameOver) setTimeout(showWinModal, 400);
+      }, this.difficulty === 'easy' ? 100 : this.difficulty === 'hard' ? 400 : 200);
+    }, 50);
   }
 }
 
@@ -399,7 +256,6 @@ class GomokuBGM {
 const canvas = document.getElementById('boardCanvas');
 const ctx = canvas.getContext('2d');
 const game = new GomokuGame();
-const bgm = new GomokuBGM();
 
 const PADDING = 30;
 const CELL_SIZE = (canvas.width - PADDING * 2) / (BOARD_SIZE - 1);
@@ -417,23 +273,10 @@ function pixelToBoard(px, py) {
 }
 
 function render() {
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  // Wood background
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#e8c982';
-  ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < 40; i++) {
-    ctx.strokeStyle = `rgba(180,140,80,${Math.random() * 0.05})`;
-    ctx.lineWidth = Math.random() * 1.5 + 0.5;
-    ctx.beginPath();
-    const x = Math.random() * w, y = Math.random() * h;
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + (Math.random() - 0.5) * 25, y + (Math.random() - 0.5) * 6);
-    ctx.stroke();
-  }
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Grid
   ctx.strokeStyle = '#8b7355';
   ctx.lineWidth = 1;
   for (let i = 0; i < BOARD_SIZE; i++) {
@@ -442,64 +285,40 @@ function render() {
     ctx.beginPath(); ctx.moveTo(PADDING, x); ctx.lineTo(PADDING + (BOARD_SIZE - 1) * CELL_SIZE, x); ctx.stroke();
   }
 
-  // Star points
   ctx.fillStyle = '#8b7355';
   for (const [r, c] of [[7,7],[3,3],[3,11],[11,3],[11,11]]) {
     const p = boardToPixel(r, c);
     ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
 
-  // Coordinates
-  ctx.fillStyle = '#8b7355';
   ctx.font = '11px sans-serif';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   for (let i = 0; i < BOARD_SIZE; i++) {
     ctx.fillText(String.fromCharCode(65 + i), PADDING + i * CELL_SIZE, 12);
     ctx.fillText(String(BOARD_SIZE - i), 12, PADDING + i * CELL_SIZE);
   }
 
-  // Win line
-  const winCells = game.gameOver && game.winner
-    ? game.getWinLine(game.lastMove.row, game.lastMove.col, game.winner)
-    : [];
-  const winSet = new Set(winCells.map(c => `${c.row},${c.col}`));
-
-  // Pieces
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
       if (game.board[r][c] === EMPTY) continue;
       const p = boardToPixel(r, c);
-      const isWin = winSet.has(`${r},${c}`);
-      const isLast = game.lastMove && game.lastMove.row === r && game.lastMove.col === c;
-
-      // Shadow
       ctx.beginPath(); ctx.arc(p.x + 2, p.y + 2, PIECE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
 
-      // Piece
       ctx.beginPath(); ctx.arc(p.x, p.y, PIECE_RADIUS, 0, Math.PI * 2);
       if (game.board[r][c] === BLACK) {
         const g = ctx.createRadialGradient(p.x - 3, p.y - 3, 1, p.x, p.y, PIECE_RADIUS);
-        g.addColorStop(0, '#555'); g.addColorStop(1, '#111');
-        ctx.fillStyle = g;
+        g.addColorStop(0, '#555'); g.addColorStop(1, '#111'); ctx.fillStyle = g;
       } else {
         const g = ctx.createRadialGradient(p.x - 3, p.y - 3, 1, p.x, p.y, PIECE_RADIUS);
-        g.addColorStop(0, '#fff'); g.addColorStop(1, '#ccc');
-        ctx.fillStyle = g;
+        g.addColorStop(0, '#fff'); g.addColorStop(1, '#ccc'); ctx.fillStyle = g;
       }
       ctx.fill();
-      ctx.strokeStyle = game.board[r][c] === BLACK ? '#000' : '#999';
-      ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = game.board[r][c] === BLACK ? '#000' : '#999'; ctx.stroke();
 
-      if (isWin) {
-        ctx.beginPath(); ctx.arc(p.x, p.y, PIECE_RADIUS + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 3; ctx.stroke();
-      }
-      if (isLast) {
+      if (game.lastMove && game.lastMove.row === r && game.lastMove.col === c) {
         ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = game.board[r][c] === BLACK ? '#ff6666' : '#ff4444';
-        ctx.fill();
+        ctx.fillStyle = '#ff4444'; ctx.fill();
       }
     }
   }
@@ -513,19 +332,15 @@ function updateStatus() {
   const text = document.getElementById('turnText');
 
   if (game.gameOver) {
-    if (game.winner === BLACK) text.textContent = '🏆 ' + (game.mode === 'pvc' ? '你赢了！' : '黑棋获胜！');
-    else if (game.winner === WHITE) text.textContent = '🏆 ' + (game.mode === 'pvc' ? 'AI 获胜！' : '白棋获胜！');
-    else text.textContent = '🤝 平局！';
-    indicator.className = 'indicator ' + (game.winner === BLACK ? 'black' : game.winner === WHITE ? 'white' : 'black');
+    indicator.className = 'indicator ' + (game.winner === BLACK ? 'black' : 'white');
+    text.textContent = game.winner === BLACK ? '🏆 黑棋获胜！' : game.winner === WHITE ? '🏆 白棋获胜！' : '🤝 平局！';
   } else if (game.aiThinking) {
-    const t = game.difficulty === 'easy' ? '🌱简单' : game.difficulty === 'hard' ? '🔥困难' : '🌿中等';
-    text.textContent = `🤖 ${t}AI思考中...`;
-  } else if (game.mode === 'pvc' && game.currentPlayer === WHITE) {
     indicator.className = 'indicator white';
-    text.textContent = '⏳ 等待AI...';
+    text.textContent = '🤖 AI思考中...';
   } else {
     indicator.className = game.currentPlayer === BLACK ? 'indicator black' : 'indicator white';
-    text.textContent = game.mode === 'pvc' ? '⚫ 你的回合' : (game.currentPlayer === BLACK ? '⚫ 黑棋落子' : '⚪ 白棋落子');
+    text.textContent = game.mode === 'pvc' && game.currentPlayer === BLACK ? '⚫ 你的回合' : 
+                       game.currentPlayer === BLACK ? '⚫ 黑棋落子' : '⚪ 白棋落子';
   }
 
   document.getElementById('blackScore').textContent = game.scores.black;
@@ -542,19 +357,15 @@ function updateMoveHistory() {
   game.history.forEach((move, i) => {
     const tag = document.createElement('span');
     tag.className = `move-tag ${move.player === BLACK ? 'black-move' : 'white-move'}`;
-    tag.innerHTML = `<span class="move-num">${i + 1}.</span>${String.fromCharCode(65 + move.col)}${BOARD_SIZE - move.row}`;
+    tag.innerHTML = `${i + 1}. ${String.fromCharCode(65 + move.col)}${BOARD_SIZE - move.row}`;
     list.appendChild(tag);
   });
   list.scrollTop = list.scrollHeight;
 }
 
-// ======================== Modal ========================
-
 function showWinModal() {
-  document.getElementById('winMessage').textContent =
-    game.winner === BLACK ? (game.mode === 'pvc' ? '🎉 你赢了！' : '⚫ 黑棋获胜！')
-    : game.winner === WHITE ? (game.mode === 'pvc' ? '🤖 AI 获胜！' : '⚪ 白棋获胜！')
-    : '🤝 平局！';
+  document.getElementById('winMessage').textContent = 
+    game.winner === BLACK ? '🏆 黑棋获胜！' : game.winner === WHITE ? '🏆 白棋获胜！' : '🤝 平局！';
   document.getElementById('winDetail').textContent = `共 ${game.moveCount} 手`;
   document.getElementById('winModal').classList.remove('hidden');
 }
@@ -563,45 +374,42 @@ function hideWinModal() {
   document.getElementById('winModal').classList.add('hidden');
 }
 
-// ======================== Canvas Interaction ========================
+// ======================== Canvas Click ========================
 
 canvas.addEventListener('click', (e) => {
   if (game.gameOver || game.aiThinking) return;
-  if (game.mode === 'pvc' && game.currentPlayer !== game.humanPlayer) return;
+  if (game.mode === 'pvc' && game.currentPlayer === WHITE) return;
 
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
   const pos = pixelToBoard((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+  
   if (!pos) return;
 
-  const result = game.place(pos.row, pos.col);
-  if (!result) return;
+  if (!game.place(pos.row, pos.col)) return;
 
   render();
 
   if (game.gameOver) {
     setTimeout(showWinModal, 400);
-  } else if (game.mode === 'pvc' && game.currentPlayer === game.aiPlayer) {
-    // AI's turn - trigger with a tiny delay for UI to update
-    setTimeout(() => game.aiMove(), 100);
+  } else if (game.mode === 'pvc') {
+    game.triggerAI();
   }
 });
 
 canvas.addEventListener('mousemove', (e) => {
   if (game.gameOver || game.aiThinking) return;
-  if (game.mode === 'pvc' && game.currentPlayer !== game.humanPlayer) {
-    canvas.style.cursor = 'default';
-    return;
+  if (game.mode === 'pvc' && game.currentPlayer === WHITE) {
+    canvas.style.cursor = 'default'; return;
   }
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const pos = pixelToBoard((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+  const pos = pixelToBoard((e.clientX - rect.left) * canvas.width / rect.width, 
+                           (e.clientY - rect.top) * canvas.height / rect.height);
   canvas.style.cursor = (pos && game.board[pos.row][pos.col] === EMPTY) ? 'pointer' : 'default';
 });
 
-// ======================== Button Handlers ========================
+// ======================== Buttons ========================
 
 document.getElementById('modePVP').addEventListener('click', () => {
   hideWinModal(); game.reset(); game.mode = 'pvp';
@@ -624,7 +432,8 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (game.mode === 'pvc') game.difficulty = btn.dataset.diff;
+    game.difficulty = btn.dataset.diff;
+    updateStatus();
   });
 });
 
@@ -641,19 +450,10 @@ document.getElementById('undoBtn').addEventListener('click', () => {
   game.undo(); render();
 });
 
-// BGM Toggle
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.createElement('button');
-  btn.id = 'bgmBtn';
-  btn.className = 'action-btn';
-  btn.innerHTML = '🎵 BGM Off';
-  btn.addEventListener('click', () => {
-    const on = bgm.toggle();
-    btn.innerHTML = on ? '🎵 BGM On' : '🎵 BGM Off';
-  });
-  document.querySelector('.sidebar').insertBefore(btn, document.querySelector('.move-history'));
+// BGM Button
+document.getElementById('bgmBtnSide')?.addEventListener('click', function() {
+  this.textContent = this.textContent.includes('关') ? '🎵 音乐开' : '🎵 音乐关';
 });
 
-// ======================== Init ========================
-
+// Init
 render();
